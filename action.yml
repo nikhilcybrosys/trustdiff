@@ -9,7 +9,7 @@ inputs:
     description: "`high` fails the job on a high-risk finding; `never` only reports."
     default: high
   comment:
-    description: Post or update a sticky PR comment (needs `pull-requests: write`).
+    description: "Post or update a sticky PR comment (needs `pull-requests: write`)."
     default: 'true'
   base:
     description: Base commit to compare from.

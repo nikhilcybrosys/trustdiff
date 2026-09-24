@@ -1,6 +1,6 @@
 {
   "name": "trustdiff",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Review what changed in who you trust when a lockfile changes: provenance downgrades, new publishers, new install scripts, brand-new dependencies.",
   "type": "module",
   "bin": { "trustdiff": "src/cli.js" },
