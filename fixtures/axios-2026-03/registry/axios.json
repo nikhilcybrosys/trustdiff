@@ -1,0 +1,106 @@
+{
+  "_comment": "Trimmed real axios packument; 1.14.1 is RECONSTRUCTED from public post-mortem (axios/axios#10636) since it was unpublished. Publish times are real registry values.",
+  "name": "axios",
+  "versions": {
+    "1.13.6": {
+      "name": "axios",
+      "version": "1.13.6",
+      "_npmUser": {
+        "name": "GitHub Actions",
+        "email": "npm-oidc-no-reply@github.com",
+        "trustedPublisher": {
+          "id": "github",
+          "oidcConfigId": "oidc:9061ef30-3132-49f4-b28c-9338d192a1a9"
+        }
+      },
+      "dependencies": {
+        "form-data": "^4.0.5",
+        "proxy-from-env": "^1.1.0",
+        "follow-redirects": "^1.15.11"
+      },
+      "dist": {
+        "shasum": "c3f92da917dc209a15dd29936d20d5089b6b6c98",
+        "tarball": "https://registry.npmjs.org/axios/-/axios-1.13.6.tgz",
+        "fileCount": 86,
+        "integrity": "sha512-ChTCHMouEe2kn713WHbQGcuYrr6fXTBiu460OTwWrWob16g1bXn4vtz07Ope7ewMozJAnEquLk5lWQWtBig9DQ==",
+        "signatures": [
+          {
+            "sig": "MEQCIHxVo3TxQKnlzZRXo0pBNjK/UVC5BCDfv/Kqx5D8dfTgAiAiZf3VMEJQ+y/9e7SgrFPRwicuN1YUZHh1kJqR1Ug7cA==",
+            "keyid": "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U"
+          }
+        ],
+        "attestations": {
+          "url": "https://registry.npmjs.org/-/npm/v1/attestations/axios@1.13.6",
+          "provenance": {
+            "predicateType": "https://slsa.dev/provenance/v1"
+          }
+        },
+        "unpackedSize": 2423319
+      },
+      "scripts": {
+        "prepare": "husky install && npm run prepare:hooks"
+      }
+    },
+    "1.14.0": {
+      "name": "axios",
+      "version": "1.14.0",
+      "_npmUser": {
+        "name": "GitHub Actions",
+        "email": "npm-oidc-no-reply@github.com",
+        "trustedPublisher": {
+          "id": "github",
+          "oidcConfigId": "oidc:9061ef30-3132-49f4-b28c-9338d192a1a9"
+        }
+      },
+      "dependencies": {
+        "form-data": "^4.0.5",
+        "proxy-from-env": "^2.1.0",
+        "follow-redirects": "^1.15.11"
+      },
+      "dist": {
+        "shasum": "7c29f4cf2ea91ef05018d5aa5399bf23ed3120eb",
+        "tarball": "https://registry.npmjs.org/axios/-/axios-1.14.0.tgz",
+        "fileCount": 86,
+        "integrity": "sha512-3Y8yrqLSwjuzpXuZ0oIYZ/XGgLwUIBU3uLvbcpb0pidD9ctpShJd43KSlEEkVQg6DS0G9NKyzOvBfUtDKEyHvQ==",
+        "signatures": [
+          {
+            "sig": "MEUCICrfrHnxo5SHAgrscf3J186Z2EmJ17/Dcx2mnjj1EaInAiEAjLgX56RFOfrWWHOQCuXM35aLCx9yLXn254meREnDj+E=",
+            "keyid": "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U"
+          }
+        ],
+        "attestations": {
+          "url": "https://registry.npmjs.org/-/npm/v1/attestations/axios@1.14.0",
+          "provenance": {
+            "predicateType": "https://slsa.dev/provenance/v1"
+          }
+        },
+        "unpackedSize": 2408136
+      },
+      "scripts": {
+        "prepare": "husky"
+      }
+    },
+    "1.14.1": {
+      "name": "axios",
+      "version": "1.14.1",
+      "_npmUser": {
+        "name": "RECONSTRUCTED-token-publish"
+      },
+      "dependencies": {
+        "form-data": "^4.0.5",
+        "proxy-from-env": "^2.1.0",
+        "follow-redirects": "^1.15.11",
+        "plain-crypto-js": "^4.2.1"
+      },
+      "dist": {
+        "tarball": "https://registry.npmjs.org/axios/-/axios-1.14.1.tgz"
+      }
+    }
+  },
+  "time": {
+    "created": "2014-08-29T23:08:36.810Z",
+    "1.13.6": "2026-02-27T15:35:51.983Z",
+    "1.14.0": "2026-03-27T19:01:40.915Z",
+    "1.14.1": "2026-03-31T00:21:58.168Z"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "name": "trustdiff",
+  "version": "0.1.0",
+  "description": "Review what changed in who you trust when a lockfile changes: provenance downgrades, new publishers, new install scripts, brand-new dependencies.",
+  "type": "module",
+  "bin": { "trustdiff": "src/cli.js" },
+  "exports": "./src/trustdiff.js",
+  "files": ["src", "fixtures"],
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "test": "node --test",
+    "demo": "node src/cli.js demo"
+  },
+  "keywords": ["npm", "lockfile", "supply-chain", "provenance", "dependabot", "renovate", "security"],
+  "license": "MIT"
+}

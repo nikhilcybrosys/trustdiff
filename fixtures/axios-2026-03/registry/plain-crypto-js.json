@@ -1,0 +1,35 @@
+{
+  "_comment": "RECONSTRUCTED: plain-crypto-js malicious versions were replaced by an npm security holder. Publish times are real registry values; scripts approximated from public reports.",
+  "name": "plain-crypto-js",
+  "versions": {
+    "4.2.0": {
+      "name": "plain-crypto-js",
+      "version": "4.2.0",
+      "_npmUser": {
+        "name": "RECONSTRUCTED-attacker"
+      },
+      "scripts": {
+        "postinstall": "node setup.js"
+      },
+      "hasInstallScript": true,
+      "dist": {}
+    },
+    "4.2.1": {
+      "name": "plain-crypto-js",
+      "version": "4.2.1",
+      "_npmUser": {
+        "name": "RECONSTRUCTED-attacker"
+      },
+      "scripts": {
+        "postinstall": "node setup.js"
+      },
+      "hasInstallScript": true,
+      "dist": {}
+    }
+  },
+  "time": {
+    "created": "2026-03-30T05:57:32.867Z",
+    "4.2.0": "2026-03-30T05:57:32.867Z",
+    "4.2.1": "2026-03-30T23:59:12.278Z"
+  }
+}
