@@ -16,9 +16,10 @@ export function checkChange({ name, version, from }, packument, now = Date.now()
     return [{ level: 'high', check: 'not-on-registry', message: `${version} is not on the registry (unpublished or never existed)` }];
   }
   const time = packument.time ?? {};
-  // Compare against the most recently published base version still on the registry.
+  // Compare against the most recently published base version still on the registry, and only ones
+  // published before this version: adding an older copy (1.4.5 next to 1.10.0) predates provenance, it doesn't downgrade it.
   const prevVersion = from
-    .filter((f) => packument.versions[f])
+    .filter((f) => packument.versions[f] && !(time[f] && time[version] && Date.parse(time[f]) > Date.parse(time[version])))
     .sort((a, b) => Date.parse(time[b] ?? 0) - Date.parse(time[a] ?? 0))[0];
   const prev = prevVersion && packument.versions[prevVersion];
   const findings = [];

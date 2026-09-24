@@ -258,3 +258,11 @@ test('same package name on npm and PyPI is looked up separately', async () => {
   assert.deepEqual(seen.sort(), ['npm:requests:1.0.0', 'pypi:requests:2.32.3']);
   assert.deepEqual(r.changes.map((c) => `${c.ecosystem}:${c.version}:${c.findings.length}`).sort(), ['npm:1.0.0:0', 'pypi:2.32.3:0']);
 });
+
+test('an older copy added next to a newer one is not a provenance downgrade', () => {
+  const p = pkg({
+    '1.4.5': {},
+    '1.10.0': { dist: { attestations: {} }, _npmUser: { name: 'GitHub Actions', trustedPublisher: {} } },
+  }, { '1.4.5': '2025-06-01T00:00:00Z', '1.10.0': '2026-01-01T00:00:00Z' });
+  assert.deepEqual(checks(checkChange({ name: 'a', version: '1.4.5', from: ['1.10.0'] }, p, NOW)), []);
+});
