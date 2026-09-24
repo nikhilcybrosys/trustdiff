@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { parseLockfile, diffLockfiles } from '../src/lockfile.js';
+import { pypiFileVersion } from '../src/registry.js';
 import { checkChange } from '../src/checks.js';
 import { trustdiff, parseAllow } from '../src/trustdiff.js';
 
@@ -179,4 +180,81 @@ test('parses yarn berry resolutions; skips workspace and patch entries', () => {
   const m = parseLockfile('yarn.lock', berry);
   assert.deepEqual([...m.keys()].sort(), ['@babel/core', 'resolve', 'string-width']);
   assert.deepEqual([...m.get('resolve')], ['1.22.8']);
+});
+
+test('parses uv.lock: pypi.org packages only, names PEP 503-normalized', () => {
+  const uv = `version = 1
+requires-python = ">=3.10"
+
+[[package]]
+name = "Typing_Extensions"
+version = "4.12.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "other" },
+]
+
+[[package]]
+name = "private-lib"
+version = "1.0.0"
+source = { registry = "https://pkgs.example.com/simple" }
+
+[[package]]
+name = "docs"
+version = "0.1.0"
+source = { git = "https://github.com/x/docs#abc" }
+
+[[package]]
+name = "app"
+version = "0.1.0"
+source = { editable = "." }
+`;
+  const m = parseLockfile('uv.lock', uv);
+  assert.deepEqual([...m.keys()], ['typing-extensions']);
+  assert.deepEqual([...m.get('typing-extensions')], ['4.12.2']);
+});
+
+test('parses poetry.lock: skips packages with a [package.source] table', () => {
+  const poetry = `[[package]]
+name = "anyio"
+version = "4.15.1"
+optional = false
+
+[package.dependencies]
+idna = ">=2.8"
+
+[[package]]
+name = "internal"
+version = "2.0.0"
+
+[package.source]
+type = "legacy"
+url = "https://pkgs.example.com/simple"
+reference = "private"
+
+[metadata]
+lock-version = "2.1"
+`;
+  const m = parseLockfile('poetry.lock', poetry);
+  assert.deepEqual([...m.keys()], ['anyio']);
+});
+
+test('PyPI file names map to versions', () => {
+  assert.equal(pypiFileVersion('annotated_doc-0.0.5-py3-none-any.whl'), '0.0.5');
+  assert.equal(pypiFileVersion('python-dateutil-2.8.2.tar.gz'), '2.8.2');
+  assert.equal(pypiFileVersion('pkg-1.0rc1.zip'), '1.0rc1');
+  assert.equal(pypiFileVersion('pkg-1.0-py2.7.egg'), null);
+});
+
+test('same package name on npm and PyPI is looked up separately', async () => {
+  const seen = [];
+  const r = await trustdiff([
+    { file: 'package-lock.json', base: '', head: JSON.stringify({ lockfileVersion: 3, packages: { 'node_modules/requests': { version: '1.0.0' } } }) },
+    { file: 'uv.lock', base: '', head: '[[package]]\nname = "requests"\nversion = "2.32.3"\nsource = { registry = "https://pypi.org/simple" }\n' },
+  ], { now: NOW, getPackument: async (name, versions, full, eco) => {
+    seen.push(`${eco}:${name}:${versions}`);
+    return pkg({ [versions[0]]: {} });
+  } });
+  assert.deepEqual(seen.sort(), ['npm:requests:1.0.0', 'pypi:requests:2.32.3']);
+  assert.deepEqual(r.changes.map((c) => `${c.ecosystem}:${c.version}:${c.findings.length}`).sort(), ['npm:1.0.0:0', 'pypi:2.32.3:0']);
 });

@@ -1,4 +1,5 @@
-// Deterministic trust checks on one changed package version, using npm registry packument data.
+// Deterministic trust checks on one changed package version, using packument-shaped registry data
+// (npm natively; registry.js maps PyPI into the same fields).
 
 const DAY = 86_400_000;
 const INSTALL_HOOKS = ['preinstall', 'install', 'postinstall'];
@@ -6,6 +7,7 @@ const INSTALL_HOOKS = ['preinstall', 'install', 'postinstall'];
 const hasProvenance = (m) => Boolean(m.dist?.attestations || m._npmUser?.trustedPublisher);
 const hasInstallScript = (m) => Boolean(m.hasInstallScript || INSTALL_HOOKS.some((h) => m.scripts?.[h]));
 const publisher = (m) => m._npmUser?.name ?? null;
+const installWhat = (m) => m.installScriptLabel ?? 'an install script';
 
 // Returns [{ level: 'high'|'warn', check, message }]
 export function checkChange({ name, version, from }, packument, now = Date.now()) {
@@ -27,10 +29,10 @@ export function checkChange({ name, version, from }, packument, now = Date.now()
   }
   if (hasInstallScript(v) && !(prev && hasInstallScript(prev))) {
     findings.push(prev
-      ? { level: 'high', check: 'new-install-script', message: `${version} adds an install script (${prevVersion} had none)` }
+      ? { level: 'high', check: 'new-install-script', message: `${version} adds ${installWhat(v)}; ${prevVersion} had none` }
       : youngPackage
-        ? { level: 'high', check: 'install-script', message: `brand-new package runs an install script` }
-        : { level: 'warn', check: 'install-script', message: `new dependency runs an install script` });
+        ? { level: 'high', check: 'install-script', message: `brand-new package runs ${installWhat(v)}` }
+        : { level: 'warn', check: 'install-script', message: `new dependency runs ${installWhat(v)}` });
   }
   // Moving to trusted publishing changes the publisher name too; that is an upgrade, not a risk.
   if (prev && publisher(prev) !== publisher(v) && !hasProvenance(v)) {

@@ -33,7 +33,7 @@ npx trustdiff main..HEAD --markdown   # what the Action posts
 
 Exit codes: `0` no high-risk findings, `1` high-risk finding, `2` error.
 
-It needs no account, no token and no install. It reads only public npm registry metadata.
+It needs no account, no token and no install. It reads only public npm and PyPI metadata.
 
 ## GitHub Action
 
@@ -43,7 +43,7 @@ Posts one comment per PR and updates it on every push. Also written to the job s
 # .github/workflows/trustdiff.yml
 on:
   pull_request:
-    paths: ['package-lock.json', 'npm-shrinkwrap.json', 'pnpm-lock.yaml', 'yarn.lock']
+    paths: ['package-lock.json', 'npm-shrinkwrap.json', 'pnpm-lock.yaml', 'yarn.lock', 'uv.lock', 'poetry.lock']
 permissions:
   contents: read
   pull-requests: write
@@ -74,6 +74,8 @@ On PRs from forks the token is read-only, so the result goes to the job summary 
 
 All checks are deterministic rules on registry metadata. No LLM, no heuristics score.
 
+On PyPI the same checks read the [Simple JSON API](https://peps.python.org/pep-0691/): provenance means a [PEP 740](https://peps.python.org/pep-0740/) attestation on the release, an "install script" means the release ships no wheel (so installing it runs build code), and `publisher-changed` never fires because PyPI does not publish who uploaded a release.
+
 ## Allowlist
 
 Acknowledge a reviewed change in `.trustdiff-allow`:
@@ -89,9 +91,10 @@ some-package@2.0.0
 - npm `package-lock.json` / `npm-shrinkwrap.json` (v2, v3)
 - pnpm `pnpm-lock.yaml` (v6, v9)
 - yarn `yarn.lock`: classic (v1) and berry (2+). `npm:` aliases resolve to the real package; git, file, patch and workspace entries are skipped.
+- uv `uv.lock` and Poetry `poetry.lock`, for packages from pypi.org (git, path, editable and private-index packages are skipped)
 - Lockfiles at the repository root
 
-Not yet: Python lockfiles, monorepo sub-directory lockfiles.
+Not yet: private registries, monorepo sub-directory lockfiles.
 
 ## About the demo fixture
 

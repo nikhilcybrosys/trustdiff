@@ -11,6 +11,6 @@
     "test": "node --test",
     "demo": "node src/cli.js demo"
   },
-  "keywords": ["npm", "yarn", "pnpm", "lockfile", "supply-chain", "provenance", "dependabot", "renovate", "security"],
+  "keywords": ["npm", "yarn", "pnpm", "pypi", "uv", "poetry", "lockfile", "supply-chain", "provenance", "dependabot", "renovate", "security"],
   "license": "MIT"
 }

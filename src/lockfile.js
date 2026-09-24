@@ -1,9 +1,12 @@
 // Parse lockfiles into Map<name, Set<version>> and diff two of them.
 
-export const LOCKFILES = ['package-lock.json', 'npm-shrinkwrap.json', 'pnpm-lock.yaml', 'yarn.lock'];
+export const LOCKFILES = ['package-lock.json', 'npm-shrinkwrap.json', 'pnpm-lock.yaml', 'yarn.lock', 'uv.lock', 'poetry.lock'];
+
+export const ecosystem = (file) => (/(^|\/)(uv|poetry)\.lock$/.test(file) ? 'pypi' : 'npm');
 
 export function parseLockfile(file, text) {
   if (!text) return new Map();
+  if (ecosystem(file) === 'pypi') return parsePyLock(text, file.endsWith('uv.lock'));
   if (file.endsWith('yarn.lock')) return parseYarn(text);
   return file.endsWith('.yaml') ? parsePnpm(text) : parseNpm(text);
 }
@@ -60,6 +63,26 @@ function parseYarn(text) {
   }
   return out;
 }
+
+// uv.lock / poetry.lock: `[[package]]` blocks whose first top-level name/version keys are the package's.
+// Only packages from pypi.org: uv marks them `source = { registry = "https://pypi.org/simple" }`, poetry
+// marks everything else (git, path, url, private index) with a `[package.source]` table.
+// ponytail: line regex instead of a TOML parser; both tools write these keys in a fixed format.
+function parsePyLock(text, uv) {
+  const out = new Map();
+  for (const block of text.split(/^\[\[package\]\]\s*$/m).slice(1)) {
+    const name = /^name = "([^"]+)"/m.exec(block)?.[1];
+    const version = /^version = "([^"]+)"/m.exec(block)?.[1];
+    const fromPypi = uv
+      ? /^source = \{ registry = "https:\/\/pypi\.org\/simple\/?" \}/m.test(block)
+      : !/^\[package\.source\]/m.test(block);
+    if (name && version && fromPypi) add(out, pypiName(name), version);
+  }
+  return out;
+}
+
+// PEP 503 normalized project name.
+export const pypiName = (name) => name.toLowerCase().replace(/[-_.]+/g, '-');
 
 function add(map, name, version) {
   if (!map.has(name)) map.set(name, new Set());
