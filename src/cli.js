@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// trustdiff [base..head] [--json]   (head empty = working tree; default HEAD..)
+// trustdiff [base..head] [--json|--markdown]   (head empty = working tree; default HEAD..)
 // trustdiff demo                    replay of the March 2026 axios compromise, offline
 
 import { execFileSync } from 'node:child_process';
@@ -9,22 +9,22 @@ import { fileURLToPath } from 'node:url';
 import { LOCKFILES } from './lockfile.js';
 import { trustdiff, parseAllow } from './trustdiff.js';
 
-const { values, positionals } = parseArgs({ allowPositionals: true, options: { json: { type: 'boolean' }, help: { type: 'boolean', short: 'h' } } });
+const { values, positionals } = parseArgs({ allowPositionals: true, options: { json: { type: 'boolean' }, markdown: { type: 'boolean' }, help: { type: 'boolean', short: 'h' } } });
 
 if (values.help) {
-  console.log('usage: trustdiff [base..head] [--json]\n       trustdiff demo\n\nExit: 0 ok, 1 high-risk finding, 2 error');
+  console.log('usage: trustdiff [base..head] [--json|--markdown]\n       trustdiff demo\n\nExit: 0 ok, 1 high-risk finding, 2 error');
   process.exit(0);
 }
 
 try {
   const { range, lockfiles, opts } = positionals[0] === 'demo' ? demo() : fromGit(positionals[0] ?? 'HEAD..');
   if (!lockfiles.length) {
-    console.log('trustdiff: no lockfile changes');
+    console.log(values.markdown ? markdown('No lockfile changes.') : 'trustdiff: no lockfile changes');
     process.exit(0);
   }
   const result = await trustdiff(lockfiles, opts);
   const high = result.changes.some((c) => c.findings.some((f) => f.level === 'high'));
-  console.log(values.json ? JSON.stringify(result, null, 2) : report(range, result));
+  console.log(values.json ? JSON.stringify(result, null, 2) : values.markdown ? markdown(`${high ? '✖ High-risk trust changes' : '✔ No high-risk trust changes'}\n\n\`\`\`\n${report(range, result)}\n\`\`\``) : report(range, result));
   process.exit(high ? 1 : 0);
 } catch (err) {
   console.error(`trustdiff: ${err.message}`);
@@ -33,6 +33,14 @@ try {
 
 function fromGit(range) {
   const [base, head = ''] = range.includes('..') ? range.split(/\.{2,3}/) : [range, ''];
+  // An unresolvable ref would read as "no lockfile" and flag every dependency as new.
+  for (const ref of [base, head].filter(Boolean)) {
+    try {
+      execFileSync('git', ['rev-parse', '--verify', '--quiet', `${ref}^{commit}`], { stdio: 'ignore' });
+    } catch {
+      throw new Error(`unknown git ref '${ref}' (in CI, fetch it or use fetch-depth: 0)`);
+    }
+  }
   const show = (ref, file) => {
     try {
       return execFileSync('git', ['show', `${ref}:./${file}`], { encoding: 'utf8', maxBuffer: 1 << 28, stdio: ['ignore', 'pipe', 'ignore'] });
@@ -73,4 +81,9 @@ function report(range, { changes, allowed }) {
   if (flagged.length) lines.push('');
   lines.push(`${changes.length} changed, ${highCount} high-risk, ${flagged.length - highCount} warning, ${changes.length - flagged.length} clean${allowed ? `, ${allowed} allowed` : ''}`);
   return lines.join('\n');
+}
+
+// The marker lets the GitHub Action find and update its own PR comment.
+function markdown(body) {
+  return `<!-- trustdiff -->\n### trustdiff\n\n${body}\n\n<sub>Acknowledge a reviewed change in \`.trustdiff-allow\`.</sub>`;
 }

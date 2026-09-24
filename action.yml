@@ -1,0 +1,63 @@
+name: trustdiff
+description: Flag trust changes in lockfile diffs (provenance downgrades, new publishers, new install scripts) as a sticky PR comment.
+branding:
+  icon: shield
+  color: orange
+
+inputs:
+  fail-on:
+    description: "`high` fails the job on a high-risk finding; `never` only reports."
+    default: high
+  comment:
+    description: Post or update a sticky PR comment (needs `pull-requests: write`).
+    default: 'true'
+  base:
+    description: Base commit to compare from.
+    default: ${{ github.event.pull_request.base.sha }}
+  head:
+    description: Head commit to compare to.
+    default: ${{ github.event.pull_request.head.sha }}
+  token:
+    description: Token used to post the comment.
+    default: ${{ github.token }}
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        BASE: ${{ inputs.base }}
+        HEAD: ${{ inputs.head }}
+        FAIL_ON: ${{ inputs.fail-on }}
+        COMMENT: ${{ inputs.comment }}
+        PR: ${{ github.event.pull_request.number }}
+        GH_TOKEN: ${{ inputs.token }}
+      run: |
+        set -uo pipefail
+        if [ -z "$BASE" ] || [ -z "$HEAD" ]; then
+          echo "::error::trustdiff needs a pull_request event, or the base and head inputs"
+          exit 2
+        fi
+        git fetch --no-tags --depth=1 origin "$BASE" "$HEAD" >/dev/null 2>&1 || true
+
+        out="$RUNNER_TEMP/trustdiff.md"
+        node "$GITHUB_ACTION_PATH/src/cli.js" "$BASE..$HEAD" --markdown > "$out"
+        code=$?
+        [ "$code" = 2 ] && exit 2
+        cat "$out" >> "$GITHUB_STEP_SUMMARY"
+
+        if [ "$COMMENT" = true ] && [ -n "$PR" ]; then
+          # Fork PRs get a read-only token: report in the job summary and warn instead of failing.
+          id=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
+            --jq '.[] | select(.body | startswith("<!-- trustdiff -->")) | .id' | head -1)
+          if [ -n "$id" ]; then
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" -F body=@"$out" >/dev/null \
+              || echo "::warning::trustdiff could not update its PR comment"
+          elif ! grep -q 'No lockfile changes.' "$out"; then
+            gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" -F body=@"$out" >/dev/null \
+              || echo "::warning::trustdiff could not comment (fork PR or missing pull-requests: write)"
+          fi
+        fi
+
+        [ "$code" = 1 ] && [ "$FAIL_ON" = high ] && exit 1
+        exit 0

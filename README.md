@@ -28,11 +28,37 @@ trustdiff demo: axios 1.14.0 → 1.14.1 (2026-03-31, reconstructed)
 npx trustdiff                 # working tree vs HEAD
 npx trustdiff main..HEAD      # a branch / PR
 npx trustdiff main..HEAD --json
+npx trustdiff main..HEAD --markdown   # what the Action posts
 ```
 
 Exit codes: `0` no high-risk findings, `1` high-risk finding, `2` error.
 
 It needs no account, no token and no install. It reads only public npm registry metadata.
+
+## GitHub Action
+
+Posts one comment per PR and updates it on every push. Also written to the job summary.
+
+```yaml
+# .github/workflows/trustdiff.yml
+on:
+  pull_request:
+    paths: ['package-lock.json', 'npm-shrinkwrap.json', 'pnpm-lock.yaml']
+permissions:
+  contents: read
+  pull-requests: write
+jobs:
+  trustdiff:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: OWNER/trustdiff@v0
+        # with:
+        #   fail-on: never   # report only; default `high` fails the check
+        #   comment: false   # job summary only
+```
+
+On PRs from forks the token is read-only, so the result goes to the job summary and the step logs a warning instead of commenting.
 
 ## Checks
 
@@ -64,7 +90,7 @@ some-package@2.0.0
 - pnpm `pnpm-lock.yaml` (v6, v9)
 - Lockfiles at the repository root
 
-Not yet: yarn.lock, Python lockfiles, monorepo sub-directory lockfiles, a GitHub Action.
+Not yet: yarn.lock, Python lockfiles, monorepo sub-directory lockfiles.
 
 ## About the demo fixture
 

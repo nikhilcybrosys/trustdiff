@@ -99,3 +99,25 @@ test('demo replays axios compromise and exits 1', () => {
   assert.match(out, /axios 1\.14\.0 → 1\.14\.1\n\s+high\s+provenance-downgrade/);
   assert.match(out, /plain-crypto-js \(new\) 4\.2\.1\n\s+high\s+install-script/);
 });
+
+test('unknown git ref is an error, not "every dependency is new"', () => {
+  let status = 0, stderr = '';
+  try {
+    execFileSync('node', ['src/cli.js', 'no-such-ref..HEAD'], { encoding: 'utf8', stdio: 'pipe' });
+  } catch (e) {
+    ({ status, stderr } = e);
+  }
+  assert.equal(status, 2);
+  assert.match(stderr, /unknown git ref 'no-such-ref'/);
+});
+
+test('--markdown output carries the sticky-comment marker', () => {
+  let out;
+  try {
+    out = execFileSync('node', ['src/cli.js', 'demo', '--markdown'], { encoding: 'utf8' });
+  } catch (e) {
+    out = e.stdout;
+  }
+  assert.ok(out.startsWith('<!-- trustdiff -->\n'));
+  assert.match(out, /✖ High-risk trust changes/);
+});
