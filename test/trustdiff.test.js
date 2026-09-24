@@ -121,3 +121,62 @@ test('--markdown output carries the sticky-comment marker', () => {
   assert.ok(out.startsWith('<!-- trustdiff -->\n'));
   assert.match(out, /✖ High-risk trust changes/);
 });
+
+test('parses yarn classic: multi-range headers, scopes, aliases; skips git/file/github deps', () => {
+  const v1 = `# yarn lockfile v1
+
+
+"@babel/core@^7.0.0", "@babel/core@^7.1.0":
+  version "7.22.0"
+  resolved "https://registry.yarnpkg.com/@babel/core/-/core-7.22.0.tgz#abc"
+
+lodash@^4.17.21:
+  version "4.17.21"
+
+"string-width-cjs@npm:string-width@^4.2.0":
+  version "4.2.3"
+
+"left-pad@git+https://github.com/x/left-pad.git#v1":
+  version "1.3.0"
+
+"local@file:./local":
+  version "0.0.0"
+
+"shorthand@user/repo":
+  version "2.0.0"
+`;
+  const m = parseLockfile('yarn.lock', v1);
+  assert.deepEqual([...m.keys()].sort(), ['@babel/core', 'lodash', 'string-width']);
+  assert.deepEqual([...m.get('@babel/core')], ['7.22.0']);
+  assert.deepEqual([...m.get('string-width')], ['4.2.3']);
+});
+
+test('parses yarn berry resolutions; skips workspace and patch entries', () => {
+  const berry = `__metadata:
+  version: 8
+  cacheKey: 10c0
+
+"@babel/core@npm:^7.0.0, @babel/core@npm:^7.1.0":
+  version: 7.22.0
+  resolution: "@babel/core@npm:7.22.0"
+
+"string-width-cjs@npm:string-width@^4.2.0":
+  version: 4.2.3
+  resolution: "string-width@npm:4.2.3"
+
+"resolve@patch:resolve@npm%3A^1.22.0#~builtin<compat/resolve>":
+  version: 1.22.8
+  resolution: "resolve@patch:resolve@npm%3A1.22.8#~builtin<compat/resolve>::version=1.22.8&hash=c3c19d"
+
+"resolve@npm:^1.22.0":
+  version: 1.22.8
+  resolution: "resolve@npm:1.22.8"
+
+"app@workspace:.":
+  version: 0.0.0-use.local
+  resolution: "app@workspace:."
+`;
+  const m = parseLockfile('yarn.lock', berry);
+  assert.deepEqual([...m.keys()].sort(), ['@babel/core', 'resolve', 'string-width']);
+  assert.deepEqual([...m.get('resolve')], ['1.22.8']);
+});

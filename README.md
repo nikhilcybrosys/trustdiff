@@ -43,7 +43,7 @@ Posts one comment per PR and updates it on every push. Also written to the job s
 # .github/workflows/trustdiff.yml
 on:
   pull_request:
-    paths: ['package-lock.json', 'npm-shrinkwrap.json', 'pnpm-lock.yaml']
+    paths: ['package-lock.json', 'npm-shrinkwrap.json', 'pnpm-lock.yaml', 'yarn.lock']
 permissions:
   contents: read
   pull-requests: write
@@ -88,9 +88,10 @@ some-package@2.0.0
 
 - npm `package-lock.json` / `npm-shrinkwrap.json` (v2, v3)
 - pnpm `pnpm-lock.yaml` (v6, v9)
+- yarn `yarn.lock`: classic (v1) and berry (2+). `npm:` aliases resolve to the real package; git, file, patch and workspace entries are skipped.
 - Lockfiles at the repository root
 
-Not yet: yarn.lock, Python lockfiles, monorepo sub-directory lockfiles.
+Not yet: Python lockfiles, monorepo sub-directory lockfiles.
 
 ## About the demo fixture
 

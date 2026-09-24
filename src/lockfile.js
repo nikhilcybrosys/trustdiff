@@ -1,9 +1,10 @@
 // Parse lockfiles into Map<name, Set<version>> and diff two of them.
 
-export const LOCKFILES = ['package-lock.json', 'npm-shrinkwrap.json', 'pnpm-lock.yaml'];
+export const LOCKFILES = ['package-lock.json', 'npm-shrinkwrap.json', 'pnpm-lock.yaml', 'yarn.lock'];
 
 export function parseLockfile(file, text) {
   if (!text) return new Map();
+  if (file.endsWith('yarn.lock')) return parseYarn(text);
   return file.endsWith('.yaml') ? parsePnpm(text) : parseNpm(text);
 }
 
@@ -29,6 +30,33 @@ function parsePnpm(text) {
     if (!inPackages) continue;
     const m = /^ {2}['"]?\/?((?:@[^@/\s]+\/)?[^@\s'"(]+)@([^\s'"(:]+)/.exec(line);
     if (m) add(out, m[1], m[2]);
+  }
+  return out;
+}
+
+// yarn berry (2+): `resolution: "name@npm:1.0.0"`; aliases resolve to the real name, and
+// patch:/workspace:/git entries have no @npm: resolution so they drop out.
+// yarn classic (v1): header `"name@range", "name@range2":` then `  version "1.0.0"`.
+// `alias@npm:real@range` counts as `real`; git/file/url/github-shorthand ranges contain / or : and are skipped.
+function parseYarn(text) {
+  const out = new Map();
+  if (/^__metadata:/m.test(text)) {
+    for (const m of text.matchAll(/^ {2}resolution: "?((?:@[^@/\s]+\/)?[^@\s"]+)@npm:([^\s"]+?)"?$/gm)) add(out, m[1], m[2]);
+    return out;
+  }
+  let name = null;
+  for (const line of text.split('\n')) {
+    if (/^[^\s#]/.test(line)) {
+      const spec = line.replace(/:\s*$/, '').split(',')[0].trim().replace(/^"|"$/g, '');
+      const m = /^((?:@[^@/]+\/)?[^@]+)@(?:npm:((?:@[^@/]+\/)?[^@]+)@)?(.*)$/.exec(spec);
+      name = m && !/[/:]/.test(m[3]) ? (m[2] ?? m[1]) : null;
+    } else if (name) {
+      const v = /^ {2}version "?([^"\s]+)"?/.exec(line);
+      if (v) {
+        add(out, name, v[1]);
+        name = null;
+      }
+    }
   }
   return out;
 }
