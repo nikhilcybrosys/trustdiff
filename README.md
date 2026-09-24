@@ -52,7 +52,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: OWNER/trustdiff@v0
+      - uses: nikhilcybrosys/trustdiff@v0
         # with:
         #   fail-on: never   # report only; default `high` fails the check
         #   comment: false   # job summary only
