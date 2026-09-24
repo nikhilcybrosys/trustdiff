@@ -33,7 +33,8 @@ runs:
         PR: ${{ github.event.pull_request.number }}
         GH_TOKEN: ${{ inputs.token }}
       run: |
-        set -uo pipefail
+        # GitHub runs this with bash -e; exit codes are handled explicitly below (1 = high-risk finding).
+        set +e -uo pipefail
         if [ -z "$BASE" ] || [ -z "$HEAD" ]; then
           echo "::error::trustdiff needs a pull_request event, or the base and head inputs"
           exit 2
