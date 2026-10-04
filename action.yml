@@ -41,22 +41,38 @@ runs:
         fi
         git fetch --no-tags --depth=1 origin "$BASE" "$HEAD" >/dev/null 2>&1 || true
 
-        out="$RUNNER_TEMP/trustdiff.md"
-        node "$GITHUB_ACTION_PATH/src/cli.js" "$BASE..$HEAD" --markdown > "$out"
+        json="$RUNNER_TEMP/trustdiff.json"
+        summary="$RUNNER_TEMP/trustdiff-summary.md"
+        comment="$RUNNER_TEMP/trustdiff-comment.md"
+        node "$GITHUB_ACTION_PATH/src/cli.js" "$BASE..$HEAD" --json > "$json"
         code=$?
         [ "$code" = 2 ] && exit 2
-        cat "$out" >> "$GITHUB_STEP_SUMMARY"
+
+        TD_JSON="$json" TD_RANGE="$BASE..$HEAD" TD_SUMMARY="$summary" TD_COMMENT="$comment" TD_CODE="$code" \
+          node --input-type=module <<'EOF'
+        import { readFileSync, writeFileSync } from 'node:fs';
+        import { pathToFileURL } from 'node:url';
+        const { summaryBody, commentBody, clearedComment } = await import(
+          pathToFileURL(`${process.env.GITHUB_ACTION_PATH}/src/report.js`).href);
+        const result = JSON.parse(readFileSync(process.env.TD_JSON, 'utf8'));
+        writeFileSync(process.env.TD_SUMMARY, summaryBody(process.env.TD_RANGE, result));
+        const body = process.env.TD_CODE === '1' ? commentBody(process.env.TD_RANGE, result) : clearedComment();
+        writeFileSync(process.env.TD_COMMENT, body ?? clearedComment());
+        EOF
+        cat "$summary" >> "$GITHUB_STEP_SUMMARY"
 
         if [ "$COMMENT" = true ] && [ -n "$PR" ]; then
           # Fork PRs get a read-only token: report in the job summary and warn instead of failing.
           id=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
             --jq '.[] | select(.body | startswith("<!-- trustdiff -->")) | .id' | head -1)
-          if [ -n "$id" ]; then
-            gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" -F body=@"$out" >/dev/null \
-              || echo "::warning::trustdiff could not update its PR comment"
-          elif ! grep -q 'No lockfile changes.' "$out"; then
-            gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" -F body=@"$out" >/dev/null \
-              || echo "::warning::trustdiff could not comment (fork PR or missing pull-requests: write)"
+          if [ "$code" = 1 ] || [ -n "$id" ]; then
+            if [ -n "$id" ]; then
+              gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" -F body=@"$comment" >/dev/null \
+                || echo "::warning::trustdiff could not update its PR comment"
+            else
+              gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" -F body=@"$comment" >/dev/null \
+                || echo "::warning::trustdiff could not comment (fork PR or missing pull-requests: write)"
+            fi
           fi
         fi
 

@@ -22,14 +22,41 @@ export async function trustdiff(lockfiles, { getPackument = fetchPackument, allo
     [k, await getPackument(name, [...versions], full, ecosystem)]));
 
   const results = changes.map((c) => ({ ...c, findings: checkChange(c, packuments.get(key(c)), now) }));
-  const allowed = (r) => allow.includes(r.name) || allow.includes(`${r.name}@${r.version}`);
+  const allowed = (r) => allow.some((entry) => allows(entry, r));
   return {
     changes: results.filter((r) => !allowed(r)),
     allowed: results.filter(allowed).length,
   };
 }
 
-// .trustdiff-allow: one `name` or `name@version` per line, `#` comments.
+// .trustdiff-allow: one entry per line, `#` comments.
+// `npm:name`, `pypi:name@version` limit the ecosystem. A bare name still matches both.
 export function parseAllow(text) {
-  return text.split('\n').map((l) => l.replace(/#.*/, '').trim()).filter(Boolean);
+  return text.split('\n').map((l) => l.replace(/#.*/, '').trim()).filter(Boolean).map(parseAllowEntry);
+}
+
+function parseAllowEntry(line) {
+  let ecosystem = null;
+  let rest = line;
+  const eco = /^(npm|pypi):(.*)$/.exec(line);
+  if (eco) {
+    ecosystem = eco[1];
+    rest = eco[2];
+  }
+  if (rest.startsWith('@')) {
+    const slash = rest.indexOf('/');
+    const verAt = rest.indexOf('@', slash === -1 ? 1 : slash + 1);
+    if (verAt === -1) return { ecosystem, name: rest, version: null };
+    return { ecosystem, name: rest.slice(0, verAt), version: rest.slice(verAt + 1) };
+  }
+  const at = rest.lastIndexOf('@');
+  if (at > 0) return { ecosystem, name: rest.slice(0, at), version: rest.slice(at + 1) };
+  return { ecosystem, name: rest, version: null };
+}
+
+function allows(entry, change) {
+  if (entry.ecosystem && entry.ecosystem !== change.ecosystem) return false;
+  if (entry.name !== change.name) return false;
+  if (entry.version && entry.version !== change.version) return false;
+  return true;
 }

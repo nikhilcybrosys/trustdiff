@@ -18,6 +18,9 @@ function parseNpm(text) {
   if (!packages) throw new Error('package-lock.json v1 is not supported; run npm install with npm 7+');
   for (const [key, entry] of Object.entries(packages)) {
     if (!key || entry.link || !entry.version) continue;
+    // A git/file/link dependency can still carry a version. Looking that up on the
+    // public registry 404s and becomes a false not-on-registry finding.
+    if (entry.resolved && !entry.resolved.startsWith('https://registry.npmjs.org/')) continue;
     add(out, entry.name ?? key.slice(key.lastIndexOf('node_modules/') + 13), entry.version);
   }
   return out;
@@ -32,7 +35,7 @@ function parsePnpm(text) {
     if (/^\S/.test(line)) inPackages = line.startsWith('packages:');
     if (!inPackages) continue;
     const m = /^ {2}['"]?\/?((?:@[^@/\s]+\/)?[^@\s'"(]+)@([^\s'"(:]+)/.exec(line);
-    if (m) add(out, m[1], m[2]);
+    if (m && !m[2].includes(':') && !/^(file|link|git)/.test(m[2])) add(out, m[1], m[2]);
   }
   return out;
 }

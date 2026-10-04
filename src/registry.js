@@ -1,30 +1,53 @@
-// npm registry lookups, returning packument-shaped { versions, time } objects for checks.js.
-// Full packuments are huge (typescript: 15 MB), so by default only the needed versions are fetched.
+// npm and PyPI lookups, returning packument-shaped { versions, time } objects for checks.js.
+// npm uses the abbreviated packument for publish times, then the version document for publisher.
 
 const REGISTRY = 'https://registry.npmjs.org';
+const ATTEMPTS = 4; // first try plus three retries
 
-async function getJson(url) {
-  const res = await fetch(url, { headers: { accept: 'application/json' } });
-  if (res.status === 404) return null;
-  if (!res.ok) throw new Error(`registry returned ${res.status} for ${url}`);
-  return res.json();
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function getJson(url, accept = 'application/json') {
+  let wait = 0;
+  let last = `registry request failed for ${url}`;
+  for (let attempt = 0; attempt < ATTEMPTS; attempt++) {
+    if (wait) await sleep(wait);
+    let res;
+    try {
+      res = await fetch(url, { headers: { accept }, signal: AbortSignal.timeout(20_000) });
+    } catch (err) {
+      last = `registry request failed for ${url}: ${err.message}`;
+      wait = Math.min(500 * 2 ** attempt, 5_000);
+      continue;
+    }
+    if (res.status === 404) return null;
+    if (res.ok) return res.json();
+    last = `registry returned ${res.status} for ${url}`;
+    if (res.status !== 429 && res.status < 500) throw new Error(last);
+    const retryAfter = Number(res.headers.get('retry-after'));
+    wait = Number.isFinite(retryAfter) ? Math.min(retryAfter * 1000, 5_000) : Math.min(500 * 2 ** attempt, 5_000);
+  }
+  throw new Error(last);
 }
 
 const path = (name) => name.replace('/', '%2F');
 
-// versions: the new and base versions to compare. full: also need `time.created` (brand-new dependency).
+// versions: the new and base versions to compare. `full` is unused: the abbreviated packument
+// already carries `time.created`. Abbreviated documents omit `_npmUser`, so each compared
+// version is still fetched on its own for publisher and trusted-publishing.
 export async function fetchPackument(name, versions, full, ecosystem = 'npm') {
   if (ecosystem === 'pypi') return fetchPypi(name);
-  if (full) return getJson(`${REGISTRY}/${path(name)}`);
-  const packument = { versions: {}, time: {} };
+  const doc = await getJson(`${REGISTRY}/${path(name)}`, 'application/vnd.npm.install-v1+json');
+  if (!doc) return null;
+  const packument = { versions: {}, time: doc.time ?? {} };
   await Promise.all(versions.map(async (v) => {
-    const doc = await getJson(`${REGISTRY}/${path(name)}/${v}`);
-    if (!doc) return;
-    packument.versions[v] = doc;
-    // ponytail: tarball Last-Modified tracks publish time within seconds; switch to the full packument if that ever drifts.
-    const res = await fetch(doc.dist.tarball, { method: 'HEAD' });
-    const modified = res.headers.get('last-modified');
-    if (modified) packument.time[v] = new Date(modified).toISOString();
+    const abbr = doc.versions?.[v];
+    if (!abbr) return;
+    const versionDoc = await getJson(`${REGISTRY}/${path(name)}/${v}`);
+    packument.versions[v] = versionDoc
+      ? { ...abbr, ...versionDoc, dist: { ...abbr.dist, ...versionDoc.dist } }
+      : abbr;
   }));
   return packument;
 }
@@ -34,20 +57,36 @@ export async function fetchPackument(name, versions, full, ecosystem = 'npm') {
 // provenance = any file of the release has a PEP 740 attestation; "install script" = the release ships
 // no wheel, so installing it runs build code. PyPI does not expose the uploader, so no publisher.
 async function fetchPypi(name) {
-  const res = await fetch(`https://pypi.org/simple/${name}/`, { headers: { accept: 'application/vnd.pypi.simple.v1+json' } });
-  if (res.status === 404) return null;
-  if (!res.ok) throw new Error(`PyPI returned ${res.status} for ${name}`);
-  const { files } = await res.json();
+  const doc = await getJson(`https://pypi.org/simple/${encodeURIComponent(name)}/`, 'application/vnd.pypi.simple.v1+json');
+  if (!doc) return null;
+  return pypiPackument(doc.files ?? []);
+}
+
+// files: Simple JSON API file entries. A version is yanked only when every file of that version is.
+export function pypiPackument(files) {
   const packument = { versions: {}, time: {} };
   for (const f of files) {
     const version = pypiFileVersion(f.filename);
     if (!version) continue;
-    const v = (packument.versions[version] ??= { dist: {}, hasInstallScript: true, installScriptLabel: 'build code (sdist only, no wheel)' });
+    const v = (packument.versions[version] ??= {
+      dist: {},
+      hasInstallScript: true,
+      installScriptLabel: 'build code (sdist only, no wheel)',
+      _files: 0,
+      _yanked: 0,
+    });
+    v._files += 1;
+    if (f.yanked) v._yanked += 1;
     if (f.provenance) v.dist.attestations = true;
     if (f.filename.endsWith('.whl')) v.hasInstallScript = false;
     const t = f['upload-time'];
     if (t && !(packument.time[version] <= t)) packument.time[version] = t;
     if (t && !(packument.time.created <= t)) packument.time.created = t;
+  }
+  for (const v of Object.values(packument.versions)) {
+    v.yanked = v._files > 0 && v._yanked === v._files;
+    delete v._files;
+    delete v._yanked;
   }
   return packument;
 }

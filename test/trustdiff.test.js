@@ -1,10 +1,15 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
+import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { parseLockfile, diffLockfiles } from '../src/lockfile.js';
-import { pypiFileVersion } from '../src/registry.js';
+import { pypiFileVersion, pypiPackument, fetchPackument } from '../src/registry.js';
 import { checkChange } from '../src/checks.js';
 import { trustdiff, parseAllow } from '../src/trustdiff.js';
+import { listChangedLockfiles } from '../src/cli.js';
+import { commentBody, summaryBody } from '../src/report.js';
 
 const NOW = Date.parse('2026-06-01T00:00:00Z');
 const OLD = '2025-01-01T00:00:00Z';
@@ -257,6 +262,141 @@ test('same package name on npm and PyPI is looked up separately', async () => {
   } });
   assert.deepEqual(seen.sort(), ['npm:requests:1.0.0', 'pypi:requests:2.32.3']);
   assert.deepEqual(r.changes.map((c) => `${c.ecosystem}:${c.version}:${c.findings.length}`).sort(), ['npm:1.0.0:0', 'pypi:2.32.3:0']);
+});
+
+test('npm git and file resolutions are not registry packages', () => {
+  const lock = JSON.stringify({ lockfileVersion: 3, packages: {
+    'node_modules/a': { version: '1.0.0', resolved: 'https://registry.npmjs.org/a/-/a-1.0.0.tgz' },
+    'node_modules/b': { version: '1.0.0', resolved: 'git+ssh://git@github.com/x/b.git#abc' },
+    'node_modules/c': { version: '1.0.0', resolved: 'file:../c' },
+  } });
+  assert.deepEqual([...parseLockfile('package-lock.json', lock).keys()], ['a']);
+});
+
+test('pnpm file and git keys are skipped', () => {
+  const text = [
+    "lockfileVersion: '9.0'",
+    'packages:',
+    '  a@1.0.0:',
+    '    resolution: {integrity: x}',
+    '  b@file:../b:',
+    '    resolution: {tarball: file}',
+    '  c@git+https://github.com/x/c.git:',
+    '    resolution: {tarball: git}',
+    '',
+  ].join('\n');
+  assert.deepEqual([...parseLockfile('pnpm-lock.yaml', text).keys()], ['a']);
+});
+
+test('yanked release is high', () => {
+  const p = pkg({ '1.0.0': { yanked: true } }, { '1.0.0': OLD });
+  assert.deepEqual(checks(checkChange({ name: 'a', version: '1.0.0', from: ['0.9.0'] }, p, NOW)), ['high:yanked-release']);
+});
+
+test('a yanked PyPI release is marked yanked; a non-yanked wheel clears it', () => {
+  const all = pypiPackument([
+    { filename: 'a-1.0.0.tar.gz', 'upload-time': OLD, yanked: true },
+    { filename: 'a-1.0.0-py3-none-any.whl', 'upload-time': OLD, yanked: true },
+  ]);
+  assert.equal(all.versions['1.0.0'].yanked, true);
+  const mixed = pypiPackument([
+    { filename: 'a-1.0.0.tar.gz', 'upload-time': OLD, yanked: true },
+    { filename: 'a-1.0.0-py3-none-any.whl', 'upload-time': OLD },
+  ]);
+  assert.equal(mixed.versions['1.0.0'].yanked, false);
+  assert.equal(mixed.versions['1.0.0'].hasInstallScript, false);
+});
+
+test('allowlist can name one ecosystem', async () => {
+  const allow = parseAllow('pypi:requests\n');
+  const r = await trustdiff([
+    { file: 'package-lock.json', base: '', head: JSON.stringify({ lockfileVersion: 3, packages: { 'node_modules/requests': { version: '1.0.0' } } }) },
+    { file: 'uv.lock', base: '', head: '[[package]]\nname = "requests"\nversion = "2.32.3"\nsource = { registry = "https://pypi.org/simple" }\n' },
+  ], { allow, getPackument: async () => null, now: NOW });
+  assert.equal(r.allowed, 1);
+  assert.deepEqual(r.changes.map((c) => c.ecosystem), ['npm']);
+});
+
+test('npm publish time comes from the abbreviated packument', async () => {
+  const real = globalThis.fetch;
+  const calls = [];
+  globalThis.fetch = async (url) => {
+    calls.push(String(url));
+    const u = String(url);
+    if (u.endsWith('/axios')) {
+      return Response.json({
+        time: { created: '2020-01-01T00:00:00.000Z', '1.14.0': '2026-03-30T00:00:00.000Z' },
+        versions: { '1.14.0': { version: '1.14.0', dist: { attestations: { url: 'x' } } } },
+      });
+    }
+    if (u.endsWith('/axios/1.14.0')) {
+      return Response.json({ version: '1.14.0', _npmUser: { name: 'github-actions[bot]' }, dist: { attestations: { url: 'x' } } });
+    }
+    throw new Error(`unexpected ${u}`);
+  };
+  try {
+    const doc = await fetchPackument('axios', ['1.14.0'], true, 'npm');
+    assert.equal(doc.time['1.14.0'], '2026-03-30T00:00:00.000Z');
+    assert.equal(doc.versions['1.14.0']._npmUser.name, 'github-actions[bot]');
+    assert.equal(calls.some((u) => u.includes('Last-Modified')), false);
+  } finally {
+    globalThis.fetch = real;
+  }
+});
+
+test('a 429 is retried', async () => {
+  const real = globalThis.fetch;
+  let n = 0;
+  globalThis.fetch = async () => {
+    n += 1;
+    if (n === 1) return new Response('slow', { status: 429, headers: { 'retry-after': '0' } });
+    return Response.json({ versions: {}, time: {} });
+  };
+  try {
+    const doc = await fetchPackument('axios', ['1.0.0'], false, 'npm');
+    assert.equal(n, 2);
+    assert.deepEqual(doc.time, {});
+  } finally {
+    globalThis.fetch = real;
+  }
+});
+
+test('a nested lockfile in the diff is selected and an untouched root lock is not', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'trustdiff-'));
+  const git = (args) => execFileSync('git', ['-c', 'user.email=t@example.com', '-c', 'user.name=t', '-c', 'commit.gpgsign=false', ...args], { cwd: dir, encoding: 'utf8' });
+  git(['init', '-b', 'main']);
+  writeFileSync(join(dir, 'package-lock.json'), '{}\n');
+  git(['add', 'package-lock.json']);
+  git(['commit', '-m', 'root']);
+  const base = git(['rev-parse', 'HEAD']).trim();
+  mkdirSync(join(dir, 'apps/web'), { recursive: true });
+  writeFileSync(join(dir, 'apps/web/pnpm-lock.yaml'), "lockfileVersion: '9.0'\n");
+  git(['add', 'apps/web/pnpm-lock.yaml']);
+  git(['commit', '-m', 'nested']);
+  const head = git(['rev-parse', 'HEAD']).trim();
+  assert.deepEqual(listChangedLockfiles(base, head, dir), ['apps/web/pnpm-lock.yaml']);
+});
+
+test('the PR comment lists high findings and counts warnings', () => {
+  const result = {
+    allowed: 0,
+    changes: [
+      { file: 'pnpm-lock.yaml', name: 'a', version: '2.0.0', from: ['1.0.0'], findings: [
+        { level: 'high', check: 'provenance-downgrade', message: 'lost provenance' },
+        { level: 'warn', check: 'young-version', message: '2.0.0 published 1h ago' },
+      ] },
+      { file: 'pnpm-lock.yaml', name: 'b', version: '1.0.0', from: [], findings: [
+        { level: 'warn', check: 'young-package', message: 'new dependency; package first published 1d ago' },
+      ] },
+    ],
+  };
+  const comment = commentBody('main..HEAD', result);
+  assert.match(comment, /provenance-downgrade/);
+  assert.match(comment, /2 warnings in the job summary/);
+  assert.doesNotMatch(comment, /young-package/);
+  const summary = summaryBody('main..HEAD', result);
+  assert.match(summary, /young-package/);
+  assert.equal(commentBody('main..HEAD', { changes: result.changes.slice(1), allowed: 0 }), null);
 });
 
 test('an older copy added next to a newer one is not a provenance downgrade', () => {

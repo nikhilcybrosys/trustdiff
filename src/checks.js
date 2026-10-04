@@ -15,6 +15,9 @@ export function checkChange({ name, version, from }, packument, now = Date.now()
   if (!v) {
     return [{ level: 'high', check: 'not-on-registry', message: `${version} is not on the registry (unpublished or never existed)` }];
   }
+  if (v.yanked) {
+    return [{ level: 'high', check: 'yanked-release', message: `${version} is yanked on the registry` }];
+  }
   const time = packument.time ?? {};
   // Compare against the most recently published base version still on the registry, and only ones
   // published before this version: adding an older copy (1.4.5 next to 1.10.0) predates provenance, it doesn't downgrade it.

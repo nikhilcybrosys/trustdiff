@@ -10,11 +10,11 @@ That was the [axios compromise of March 2026](https://github.com/axios/axios/iss
 $ npx trustdiff demo
 trustdiff demo: axios 1.14.0 → 1.14.1 (2026-03-31, reconstructed)
 
-✖ axios 1.14.0 → 1.14.1
+✖ package-lock.json  axios 1.14.0 → 1.14.1
     high  provenance-downgrade  1.14.0 was published with provenance/trusted publishing, 1.14.1 was not
     warn  publisher-changed     publisher changed: GitHub Actions → RECONSTRUCTED-token-publish
     warn  young-version         1.14.1 published 38m ago
-✖ plain-crypto-js (new) 4.2.1
+✖ package-lock.json  plain-crypto-js (new) 4.2.1
     high  install-script        brand-new package runs an install script
     warn  young-package         new dependency; package first published 19h ago
     warn  young-version         4.2.1 published 1h ago
@@ -43,7 +43,7 @@ Posts one comment per PR and updates it on every push. Also written to the job s
 # .github/workflows/trustdiff.yml
 on:
   pull_request:
-    paths: ['package-lock.json', 'npm-shrinkwrap.json', 'pnpm-lock.yaml', 'yarn.lock', 'uv.lock', 'poetry.lock']
+    paths: ['**/package-lock.json', '**/npm-shrinkwrap.json', '**/pnpm-lock.yaml', '**/yarn.lock', '**/uv.lock', '**/poetry.lock']
 permissions:
   contents: read
   pull-requests: write
@@ -71,6 +71,7 @@ On PRs from forks the token is read-only, so the result goes to the job summary 
 | `publisher-changed` | warn | A different npm user published the new version. Not raised when moving *to* trusted publishing. |
 | `young-package` | warn | A new dependency whose package was first published under 7 days ago. |
 | `young-version` | warn | The new version was published under 48 hours ago. |
+| `yanked-release` | high | Every file of the new PyPI release is yanked. |
 
 All checks are deterministic rules on registry metadata. No LLM, no heuristics score.
 
@@ -83,7 +84,8 @@ Acknowledge a reviewed change in `.trustdiff-allow`:
 ```
 # reviewed 2026-09-24: moved publishing to a new maintainer
 some-package@2.0.0
-@scope/pkg        # trust all versions
+@scope/pkg        # trust all versions, either ecosystem
+pypi:requests     # PyPI only; npm "requests" still reports
 ```
 
 ## Supported
@@ -92,9 +94,11 @@ some-package@2.0.0
 - pnpm `pnpm-lock.yaml` (v6, v9)
 - yarn `yarn.lock`: classic (v1) and berry (2+). `npm:` aliases resolve to the real package; git, file, patch and workspace entries are skipped.
 - uv `uv.lock` and Poetry `poetry.lock`, for packages from pypi.org (git, path, editable and private-index packages are skipped)
-- Lockfiles at the repository root
+- Lockfiles anywhere in the diff, not only at the repository root. Git, file, and link dependencies are skipped, because they are not public-registry packages.
 
-Not yet: private registries, monorepo sub-directory lockfiles.
+Not yet: private registries.
+
+The pull request comment lists high findings. Warnings are in the job summary, with a count on the comment.
 
 ## About the demo fixture
 
